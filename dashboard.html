@@ -1,0 +1,311 @@
+<title>US Retail Sales — Forecast Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #eef1f5; --surface: #ffffff; --surface-2: #f5f7fa;
+    --ink: #16233a; --muted: #5a6577; --faint: #8b95a6; --line: #dde2ea;
+    --accent: #178a7a; --accent-ink: #0f5f53; --accent-soft: #e0f0ec;
+    --navy: #1d3557; --band: rgba(23,138,122,.16);
+    --grid: #e7ebf1; --shadow: 0 1px 2px rgba(20,35,58,.05), 0 10px 30px rgba(20,35,58,.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c1119; --surface: #131a26; --surface-2: #0f1520;
+      --ink: #e9eef6; --muted: #9aa6b8; --faint: #6b7688; --line: #232d3d;
+      --accent: #3cc0ac; --accent-ink: #6ad6c4; --accent-soft: #10302b;
+      --navy: #7fa8d8; --band: rgba(60,192,172,.16);
+      --grid: #1c2634; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 34px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg:#eef1f5;--surface:#fff;--surface-2:#f5f7fa;--ink:#16233a;--muted:#5a6577;
+    --faint:#8b95a6;--line:#dde2ea;--accent:#178a7a;--accent-ink:#0f5f53;
+    --accent-soft:#e0f0ec;--navy:#1d3557;--band:rgba(23,138,122,.16);--grid:#e7ebf1;
+    --shadow:0 1px 2px rgba(20,35,58,.05),0 10px 30px rgba(20,35,58,.07);
+  }
+  :root[data-theme="dark"] {
+    --bg:#0c1119;--surface:#131a26;--surface-2:#0f1520;--ink:#e9eef6;--muted:#9aa6b8;
+    --faint:#6b7688;--line:#232d3d;--accent:#3cc0ac;--accent-ink:#6ad6c4;
+    --accent-soft:#10302b;--navy:#7fa8d8;--band:rgba(60,192,172,.16);--grid:#1c2634;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 34px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 28px 22px 60px; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  header { margin-bottom: 22px; }
+  .eyebrow { font-size: 12px; letter-spacing: .15em; text-transform: uppercase; color: var(--accent-ink); font-weight: 700; margin: 0 0 8px; }
+  h1 { font-size: clamp(24px, 4vw, 33px); margin: 0; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; }
+  .sub { color: var(--muted); margin: 8px 0 0; font-size: 15px; }
+
+  /* KPI tiles */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 22px 0; }
+  @media (max-width: 640px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 16px 15px; box-shadow: var(--shadow); }
+  .kpi .lab { font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .kpi .val { font-size: clamp(20px, 3.4vw, 26px); font-weight: 600; letter-spacing: -.01em; margin-top: 6px; }
+  .kpi .val small { font-size: 14px; font-weight: 500; color: var(--faint); }
+  .kpi .note { font-size: 12px; color: var(--faint); margin-top: 3px; }
+  .kpi.accent { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+  .kpi.accent .val { color: var(--accent-ink); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 20px 18px; box-shadow: var(--shadow); margin-bottom: 18px; }
+  .card h2 { font-size: 16px; margin: 0 0 2px; font-weight: 600; }
+  .card .cap { font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+  .swatch.band { height: 10px; border-radius: 3px; }
+  .chart-holder { position: relative; width: 100%; }
+  canvas { display: block; width: 100%; }
+  .tip {
+    position: absolute; pointer-events: none; background: var(--ink); color: var(--bg);
+    padding: 7px 10px; border-radius: 8px; font-size: 12px; line-height: 1.35;
+    transform: translate(-50%, -120%); white-space: nowrap; opacity: 0; transition: opacity .08s; z-index: 5;
+    box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  }
+  .tip b { font-weight: 700; }
+
+  /* seasonal bars */
+  .seasonal { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; align-items: end; height: 150px; margin-top: 6px; }
+  .sbar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 6px; }
+  .sbar .col { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; transition: opacity .15s; }
+  .sbar.peak .col { background: var(--navy); }
+  .sbar .m { font-size: 11px; color: var(--muted); }
+  .sbar .p { font-size: 10.5px; color: var(--faint); }
+
+  /* table */
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 14px; }
+  th { text-align: right; font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  td { padding: 10px 14px; text-align: right; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.peak { color: var(--accent-ink); font-weight: 600; }
+  footer { color: var(--faint); font-size: 13px; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: space-between; }
+  footer a { color: var(--accent-ink); text-decoration: none; font-weight: 600; }
+  footer a:hover { text-decoration: underline; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Time-Series Forecast · Data Science Dashboard</p>
+    <h1>US Retail Sales — 12-Month Forecast</h1>
+    <p class="sub">Monthly retail &amp; food-services sales, modelled with Holt-Winters exponential smoothing. Source: FRED RSXFSN (1992–2026).</p>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card">
+    <h2>History &amp; forecast</h2>
+    <p class="cap">Last 3 years of actuals, then the next 12 months projected with a 95% confidence band. Hover the chart for exact values.</p>
+    <div class="chart-holder">
+      <canvas id="chart" height="360"></canvas>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--navy)"></i> Actual</span>
+      <span><i class="swatch" style="background:var(--accent)"></i> Forecast</span>
+      <span><i class="swatch band" style="background:var(--band)"></i> 95% band</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Seasonal pattern</h2>
+    <p class="cap">Average sales by calendar month, indexed to 100 = an average month. December is the clear peak.</p>
+    <div class="seasonal" id="seasonal"></div>
+  </div>
+
+  <div class="card">
+    <h2>Forecast detail</h2>
+    <p class="cap">Projected monthly sales ($ millions) with the lower/upper 95% bounds.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Month</th><th>Forecast</th><th>Low</th><th>High</th></tr></thead>
+        <tbody id="ftable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    <span>Built with Python · pandas · statsmodels — full code on GitHub.</span>
+    <a href="https://github.com/MuhammadNasir-44/Retail-Sales-Forecasting" target="_blank" rel="noopener">View the project →</a>
+  </footer>
+</div>
+
+<script>
+const DATA = {"history":[{"date":"2023-07","value":591150.0},{"date":"2023-08","value":613511.0},{"date":"2023-09","value":579306.0},{"date":"2023-10","value":594266.0},{"date":"2023-11","value":608426.0},{"date":"2023-12","value":657243.0},{"date":"2024-01","value":539834.0},{"date":"2024-02","value":544169.0},{"date":"2024-03","value":597695.0},{"date":"2024-04","value":593774.0},{"date":"2024-05","value":631832.0},{"date":"2024-06","value":592999.0},{"date":"2024-07","value":618432.0},{"date":"2024-08","value":622421.0},{"date":"2024-09","value":579083.0},{"date":"2024-10","value":622738.0},{"date":"2024-11","value":630399.0},{"date":"2024-12","value":691312.0},{"date":"2025-01","value":566662.0},{"date":"2025-02","value":543970.0},{"date":"2025-03","value":624954.0},{"date":"2025-04","value":623756.0},{"date":"2025-05","value":647306.0},{"date":"2025-06","value":616031.0},{"date":"2025-07","value":644493.0},{"date":"2025-08","value":640803.0},{"date":"2025-09","value":611277.0},{"date":"2025-10","value":642315.0},{"date":"2025-11","value":640201.0},{"date":"2025-12","value":716924.0},{"date":"2026-01","value":582287.0},{"date":"2026-02","value":564663.0},{"date":"2026-03","value":657586.0},{"date":"2026-04","value":654070.0},{"date":"2026-05","value":685407.0},{"date":"2026-06","value":672368.0}],"forecast":[{"date":"2026-07","value":678310.1219780688,"lower":659761.6020450888,"upper":696858.6419110489},{"date":"2026-08","value":684269.4600185318,"lower":665720.9400855517,"upper":702817.9799515118},{"date":"2026-09","value":644145.5397445194,"lower":625597.0198115393,"upper":662694.0596774995},{"date":"2026-10","value":669687.0004565172,"lower":651138.4805235371,"upper":688235.5203894973},{"date":"2026-11","value":676510.4977245477,"lower":657961.9777915677,"upper":695059.0176575278},{"date":"2026-12","value":750665.5218316192,"lower":732117.0018986391,"upper":769214.0417645993},{"date":"2027-01","value":612630.3181458346,"lower":594081.7982128545,"upper":631178.8380788147},{"date":"2027-02","value":597480.4966599023,"lower":578931.9767269222,"upper":616029.0165928823},{"date":"2027-03","value":686600.6808367481,"lower":668052.160903768,"upper":705149.2007697282},{"date":"2027-04","value":672533.6594822481,"lower":653985.1395492681,"upper":691082.1794152282},{"date":"2027-05","value":710186.252991058,"lower":691637.733058078,"upper":728734.7729240381},{"date":"2027-06","value":687856.7665521237,"lower":669308.2466191436,"upper":706405.2864851038}],"seasonal":[{"month":1,"index":89.52546954207781},{"month":2,"index":88.42348322831927},{"month":3,"index":100.97746559440309},{"month":4,"index":99.06899354369675},{"month":5,"index":105.15225392015756},{"month":6,"index":102.46301496523157},{"month":7,"index":100.18671343821299},{"month":8,"index":102.22506099788045},{"month":9,"index":95.78206383952671},{"month":10,"index":99.27010779402467},{"month":11,"index":101.21504745574816},{"month":12,"index":115.71032568072096}],"metrics":{"best_model":"Holt-Winters","mape":4.22,"next_year_total":8070876.316421719,"latest_month":"2026-06","latest_value":672368.0}};
+const MONTHS = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const fmtB = v => "$" + (v/1000).toFixed(1) + "B";
+const fmtM = v => Math.round(v).toLocaleString();
+const labelOf = d => { const [y,m] = d.split("-"); return MONTHS[+m] + " " + y; };
+
+/* ---------- KPIs ---------- */
+(function(){
+  const m = DATA.metrics;
+  const peak = DATA.seasonal.reduce((a,b)=> b.index>a.index?b:a);
+  const tiles = [
+    {lab:"Forecast · next 12 mo", val:"$"+(m.next_year_total/1000).toFixed(0)+"B", note:"total projected sales", accent:true},
+    {lab:"Model accuracy", val:m.mape.toFixed(2)+"%", note:m.best_model+" · MAPE (lower is better)"},
+    {lab:"Peak month", val:MONTHS[peak.month], note:Math.round(peak.index)+"% of an average month"},
+    {lab:"Latest actual", val:fmtB(m.latest_value), note:labelOf(m.latest_month)},
+  ];
+  document.getElementById("kpis").innerHTML = tiles.map(t=>`
+    <div class="kpi ${t.accent?'accent':''}">
+      <div class="lab">${t.lab}</div>
+      <div class="val">${t.val}</div>
+      <div class="note">${t.note}</div>
+    </div>`).join("");
+})();
+
+/* ---------- Seasonal bars ---------- */
+(function(){
+  const max = Math.max(...DATA.seasonal.map(d=>d.index));
+  const min = Math.min(...DATA.seasonal.map(d=>d.index)) - 4;
+  document.getElementById("seasonal").innerHTML = DATA.seasonal.map(d=>{
+    const h = ((d.index - min) / (max - min)) * 100;
+    const peak = d.index === max;
+    return `<div class="sbar ${peak?'peak':''}" title="${MONTHS[d.month]}: ${Math.round(d.index)}% of average">
+      <div class="col" style="height:${Math.max(h,3)}%"></div>
+      <div class="p">${Math.round(d.index)}</div>
+      <div class="m">${MONTHS[d.month][0]}</div>
+    </div>`;
+  }).join("");
+})();
+
+/* ---------- Forecast table ---------- */
+(function(){
+  const peakVal = Math.max(...DATA.forecast.map(d=>d.value));
+  document.getElementById("ftable").innerHTML = DATA.forecast.map(d=>{
+    const isPeak = d.value === peakVal;
+    return `<tr>
+      <td>${labelOf(d.date)}</td>
+      <td class="mono ${isPeak?'peak':''}">${fmtM(d.value)}</td>
+      <td class="mono" style="color:var(--faint)">${fmtM(d.lower)}</td>
+      <td class="mono" style="color:var(--faint)">${fmtM(d.upper)}</td>
+    </tr>`;
+  }).join("");
+})();
+
+/* ---------- Main chart (Canvas) ---------- */
+(function(){
+  const canvas = document.getElementById("chart");
+  const tip = document.getElementById("tip");
+  const ctx = canvas.getContext("2d");
+
+  // Build a unified point list. Actuals then forecast; the last actual is
+  // duplicated as the forecast's start so the lines join cleanly.
+  const hist = DATA.history.map(d=>({date:d.date, v:d.value, type:"hist"}));
+  const last = hist[hist.length-1];
+  const fc = DATA.forecast.map(d=>({date:d.date, v:d.value, lo:d.lower, up:d.upper, type:"fc"}));
+  const pts = hist.concat(fc);
+  const bandPts = [{date:last.date, lo:last.v, up:last.v}].concat(
+    DATA.forecast.map(d=>({date:d.date, lo:d.lower, up:d.upper})));
+
+  const cssColor = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  let W, H, dpr, geom;
+  const PAD = {l:52, r:14, t:14, b:26};
+
+  function layout(){
+    dpr = window.devicePixelRatio || 1;
+    W = canvas.clientWidth; H = 360;
+    canvas.width = W*dpr; canvas.height = H*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    const vals = pts.map(p=>p.v).concat(bandPts.map(b=>b.up), bandPts.map(b=>b.lo));
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const pad = (hi-lo)*0.12; lo -= pad; hi += pad;
+    const iw = W-PAD.l-PAD.r, ih = H-PAD.t-PAD.b;
+    const x = i => PAD.l + (i/(pts.length-1))*iw;
+    const y = v => PAD.t + (1-(v-lo)/(hi-lo))*ih;
+    geom = {x, y, lo, hi, iw, ih};
+  }
+
+  function draw(hoverIdx){
+    layout();
+    const {x, y, lo, hi} = geom;
+    ctx.clearRect(0,0,W,H);
+    const ink=cssColor("--ink"), navy=cssColor("--navy"), accent=cssColor("--accent"),
+          grid=cssColor("--grid"), faint=cssColor("--faint"), band=cssColor("--band");
+
+    // y gridlines + labels
+    ctx.font = "11px ui-monospace, monospace"; ctx.textBaseline="middle";
+    const ticks=4;
+    for(let i=0;i<=ticks;i++){
+      const v = lo + (hi-lo)*i/ticks, yy = y(v);
+      ctx.strokeStyle=grid; ctx.lineWidth=1; ctx.beginPath();
+      ctx.moveTo(PAD.l,yy); ctx.lineTo(W-PAD.r,yy); ctx.stroke();
+      ctx.fillStyle=faint; ctx.textAlign="right";
+      ctx.fillText("$"+(v/1000).toFixed(0)+"B", PAD.l-8, yy);
+    }
+
+    // x year labels
+    ctx.textAlign="center"; ctx.textBaseline="top";
+    let lastYear="";
+    pts.forEach((p,i)=>{
+      const yr=p.date.split("-")[0];
+      if(yr!==lastYear && p.date.split("-")[1]==="01"){
+        lastYear=yr; ctx.fillStyle=faint;
+        ctx.fillText(yr, x(i), H-PAD.b+7);
+      }
+    });
+
+    // confidence band (map bandPts to global x index starting at last hist idx)
+    const startIdx = hist.length-1;
+    ctx.beginPath();
+    bandPts.forEach((b,i)=>{ const xi=x(startIdx+i); i?ctx.lineTo(xi,y(b.up)):ctx.moveTo(xi,y(b.up)); });
+    for(let i=bandPts.length-1;i>=0;i--){ const xi=x(startIdx+i); ctx.lineTo(xi,y(bandPts[i].lo)); }
+    ctx.closePath(); ctx.fillStyle=band; ctx.fill();
+
+    // divider at "now"
+    ctx.strokeStyle=faint; ctx.setLineDash([3,3]); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x(startIdx),PAD.t); ctx.lineTo(x(startIdx),H-PAD.b); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // history line
+    ctx.lineWidth=2; ctx.lineJoin="round"; ctx.strokeStyle=navy;
+    ctx.beginPath();
+    hist.forEach((p,i)=>{ i?ctx.lineTo(x(i),y(p.v)):ctx.moveTo(x(i),y(p.v)); });
+    ctx.stroke();
+    // forecast line (starts at last hist point)
+    ctx.strokeStyle=accent; ctx.beginPath();
+    ctx.moveTo(x(startIdx),y(last.v));
+    fc.forEach((p,i)=>ctx.lineTo(x(startIdx+1+i),y(p.v)));
+    ctx.stroke();
+
+    // hover marker
+    if(hoverIdx!=null){
+      const p=pts[hoverIdx], xi=x(hoverIdx), yi=y(p.v);
+      ctx.strokeStyle=faint; ctx.lineWidth=1; ctx.beginPath();
+      ctx.moveTo(xi,PAD.t); ctx.lineTo(xi,H-PAD.b); ctx.stroke();
+      ctx.fillStyle = p.type==="fc"?accent:navy;
+      ctx.beginPath(); ctx.arc(xi,yi,4.5,0,7); ctx.fill();
+      ctx.strokeStyle=cssColor("--surface"); ctx.lineWidth=2; ctx.stroke();
+      tip.style.left = xi+"px"; tip.style.top = yi+"px"; tip.style.opacity=1;
+      tip.innerHTML = `${labelOf(p.date)}<br><b>${fmtM(p.v)}</b> <span style="opacity:.7">$M</span>`
+        + (p.type==="fc"?` · forecast`:``);
+    } else { tip.style.opacity=0; }
+  }
+
+  function nearest(clientX){
+    const rect=canvas.getBoundingClientRect();
+    const mx=clientX-rect.left;
+    let best=0, bd=1e9;
+    pts.forEach((p,i)=>{ const d=Math.abs(geom.x(i)-mx); if(d<bd){bd=d;best=i;} });
+    return best;
+  }
+  canvas.addEventListener("mousemove", e=>draw(nearest(e.clientX)));
+  canvas.addEventListener("mouseleave", ()=>draw(null));
+  canvas.addEventListener("touchstart", e=>{draw(nearest(e.touches[0].clientX));}, {passive:true});
+  canvas.addEventListener("touchmove", e=>{draw(nearest(e.touches[0].clientX));}, {passive:true});
+
+  draw(null);
+  window.addEventListener("resize", ()=>draw(null));
+  // redraw on theme toggle
+  new MutationObserver(()=>draw(null)).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
+})();
+</script>
