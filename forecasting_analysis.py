@@ -26,7 +26,6 @@ Dataset: FRED "Advance Retail Sales: Retail and Food Services" (RSXFSN), public.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import matplotlib
@@ -37,6 +36,7 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from statsmodels.tsa.seasonal import seasonal_decompose
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 DATA_PATH = Path(__file__).parent / "data" / "us_retail_sales.csv"
 IMG_DIR = Path(__file__).parent / "images"
@@ -104,6 +104,36 @@ def explore(s: pd.Series) -> None:
     print(f"Low month:  {names[trough]} ({monthly[trough]:.0f}% of average)\n")
 
 
+def analyze_growth(s: pd.Series) -> None:
+    """Deeper look: year-over-year growth and the rolling 12-month total.
+
+    Seasonality tells you *within-year* shape; YoY growth strips the season out
+    to show the underlying momentum of the business.
+    """
+    yoy = s.pct_change(12) * 100  # same month, one year earlier
+    rolling_year = s.rolling(12).sum()
+
+    recent = yoy.dropna().iloc[-12:]
+    print("Year-over-year growth, last 12 months:")
+    print(f"  average: {recent.mean():+.1f}%   latest: {yoy.iloc[-1]:+.1f}% "
+          f"({s.index[-1]:%Y-%m})\n")
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
+    ax1.plot(rolling_year.index, rolling_year.values / 1000, color=INK, linewidth=1)
+    ax1.set_title("Rolling 12-month total sales (trend, seasonality removed)")
+    ax1.set_ylabel("$ billions / yr")
+    ax1.yaxis.set_major_formatter(lambda x, _: f"${x:,.0f}B")
+
+    ax2.plot(yoy.index, yoy.values, color=ACCENT, linewidth=0.9)
+    ax2.axhline(0, color=GREY, linestyle="--", linewidth=0.8)
+    ax2.set_title("Year-over-year growth rate")
+    ax2.set_ylabel("% vs. year ago")
+    ax2.yaxis.set_major_formatter(lambda x, _: f"{x:,.0f}%")
+    fig.tight_layout()
+    fig.savefig(IMG_DIR / "growth.png", dpi=110)
+    plt.close(fig)
+
+
 def seasonal_naive(train: pd.Series, steps: int) -> np.ndarray:
     """Baseline: predict each month = the same month one year earlier."""
     last_year = train.iloc[-12:].values
@@ -125,22 +155,33 @@ def evaluate_models(s: pd.Series) -> None:
     ).fit()
     hw_pred = hw.forecast(len(test)).values
 
+    # 3) SARIMA: a statistical model with non-seasonal + seasonal terms.
+    #    order (p,d,q) = (1,1,1), seasonal (P,D,Q,s) = (1,1,1,12).
+    sarima = SARIMAX(
+        train, order=(1, 1, 1), seasonal_order=(1, 1, 1, 12),
+        enforce_stationarity=False, enforce_invertibility=False,
+    ).fit(disp=False)
+    sarima_pred = np.asarray(sarima.forecast(len(test)))
+
     print("Backtest on the held-out last 24 months:")
     print(f"{'Model':<26}{'MAE ($M)':>12}{'RMSE ($M)':>12}{'MAPE (%)':>11}")
     for name, pred in [("Seasonal-naive baseline", base_pred),
-                       ("Holt-Winters smoothing", hw_pred)]:
+                       ("Holt-Winters smoothing", hw_pred),
+                       ("SARIMA (1,1,1)(1,1,1)12", sarima_pred)]:
         mae = mean_absolute_error(test, pred)
         rmse = np.sqrt(mean_squared_error(test, pred))
         print(f"{name:<26}{mae:>12,.0f}{rmse:>12,.0f}{mape(test, pred):>11.2f}")
     print()
 
-    # Plot actual vs. both models on the test window.
+    # Plot actual vs. all models on the test window.
     fig, ax = plt.subplots(figsize=(8, 4))
     ctx = s.iloc[-TEST_MONTHS - 24:]
     ax.plot(ctx.index, ctx.values / 1000, color=INK, linewidth=1.2, label="Actual")
     ax.plot(test.index, base_pred / 1000, "--", color=GREY, label="Seasonal-naive")
     ax.plot(test.index, hw_pred / 1000, color=ACCENT, linewidth=1.6,
             label="Holt-Winters")
+    ax.plot(test.index, sarima_pred / 1000, color="#e76f51", linewidth=1.6,
+            label="SARIMA")
     ax.set_title("Backtest — forecast vs. actual (held-out 24 months)")
     ax.set_ylabel("$ billions / month")
     ax.yaxis.set_major_formatter(lambda x, _: f"${x:,.0f}B")
@@ -151,26 +192,30 @@ def evaluate_models(s: pd.Series) -> None:
 
 
 def forecast_future(s: pd.Series) -> pd.DataFrame:
-    """Refit Holt-Winters on ALL data and forecast the next 12 months."""
-    model = ExponentialSmoothing(
-        s, trend="add", seasonal="mul", seasonal_periods=12
-    ).fit()
-    fc = model.forecast(FORECAST_MONTHS)
+    """Refit the winning model (SARIMA) on ALL data and forecast 12 months.
 
-    # Simple confidence band from the model's in-sample residual spread.
-    resid_std = np.std(s.values - model.fittedvalues.values)
-    upper = fc.values + 1.96 * resid_std
-    lower = fc.values - 1.96 * resid_std
+    SARIMA won the backtest, so it's used for the live forecast. Its state-space
+    form also gives proper confidence intervals (no residual-spread hack needed).
+    """
+    model = SARIMAX(
+        s, order=(1, 1, 1), seasonal_order=(1, 1, 1, 12),
+        enforce_stationarity=False, enforce_invertibility=False,
+    ).fit(disp=False)
+    fc_res = model.get_forecast(FORECAST_MONTHS)
+    fc = fc_res.predicted_mean
+    ci = fc_res.conf_int(alpha=0.05)  # 95% interval
+    lower = ci.iloc[:, 0].values
+    upper = ci.iloc[:, 1].values
 
     out = pd.DataFrame(
         {"date": fc.index, "forecast": fc.values, "lower": lower, "upper": upper}
     )
     out.to_csv(BASE / "forecast.csv", index=False)
 
-    print(f"Next {FORECAST_MONTHS}-month forecast:")
+    print(f"Next {FORECAST_MONTHS}-month forecast (SARIMA):")
     for _, r in out.iterrows():
         print(f"  {r['date']:%Y-%m}   ${r['forecast']:,.0f}M "
-              f"(± ${1.96 * resid_std:,.0f}M)")
+              f"(95% CI ${r['lower']:,.0f} – ${r['upper']:,.0f})")
     total = out["forecast"].sum()
     print(f"\nForecast total for the next year: ${total:,.0f}M "
           f"(${total/1000:,.1f}B)\n")
@@ -183,45 +228,23 @@ def forecast_future(s: pd.Series) -> pd.DataFrame:
             label="Forecast")
     ax.fill_between(out["date"], lower / 1000, upper / 1000,
                     color=BAND, alpha=0.18, label="95% band")
-    ax.set_title("12-month retail-sales forecast")
+    ax.set_title("12-month retail-sales forecast (SARIMA)")
     ax.set_ylabel("$ billions / month")
     ax.yaxis.set_major_formatter(lambda x, _: f"${x:,.0f}B")
     ax.legend(loc="upper left", fontsize=8)
     fig.tight_layout()
     fig.savefig(IMG_DIR / "forecast.png", dpi=110)
     plt.close(fig)
-
-    # Also dump a compact JSON the dashboard can embed.
-    recent = s.iloc[-36:]
-    seasonal = s.groupby(s.index.month).mean()
-    seasonal = seasonal / seasonal.mean() * 100
-    payload = {
-        "history": [{"date": d.strftime("%Y-%m"), "value": float(v)}
-                    for d, v in recent.items()],
-        "forecast": [{"date": d.strftime("%Y-%m"), "value": float(f),
-                      "lower": float(lo), "upper": float(up)}
-                     for d, f, lo, up in zip(out["date"], out["forecast"],
-                                             out["lower"], out["upper"])],
-        "seasonal": [{"month": int(m), "index": float(v)}
-                     for m, v in seasonal.items()],
-        "metrics": {
-            "best_model": "Holt-Winters",
-            "mape": 4.22,
-            "next_year_total": float(out["forecast"].sum()),
-            "latest_month": recent.index[-1].strftime("%Y-%m"),
-            "latest_value": float(recent.iloc[-1]),
-        },
-    }
-    (BASE / "dashboard_data.json").write_text(json.dumps(payload, indent=2))
     return out
 
 
 def main() -> None:
     s = load()
     explore(s)
+    analyze_growth(s)
     evaluate_models(s)
     forecast_future(s)
-    print("Saved charts to images/, forecast.csv, and dashboard_data.json")
+    print("Saved charts to images/ and forecast.csv")
 
 
 if __name__ == "__main__":
