@@ -3,3 +3,5 @@ numpy
 matplotlib
 statsmodels
 scikit-learn
+streamlit
+plotly
