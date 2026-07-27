@@ -85,6 +85,9 @@ excluding partial years). Run it with:
 python sql_analysis.py
 ```
 
+The query results are saved to [`sql_output/`](sql_output/) as CSVs — viewable
+directly on GitHub without running anything.
+
 ## Notebook
 
 [`forecasting_walkthrough.ipynb`](forecasting_walkthrough.ipynb) is a

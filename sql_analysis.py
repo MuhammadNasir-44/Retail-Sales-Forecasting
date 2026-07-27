@@ -24,6 +24,7 @@ import pandas as pd
 
 DATA_PATH = Path(__file__).parent / "data" / "us_retail_sales.csv"
 SQL_PATH = Path(__file__).parent / "sql" / "queries.sql"
+OUT_DIR = Path(__file__).parent / "sql_output"
 
 
 def load_queries(path: Path = SQL_PATH) -> dict[str, str]:
@@ -62,20 +63,18 @@ def run(conn: sqlite3.Connection, sql: str) -> pd.DataFrame:
 def main() -> None:
     conn = build_db()
     queries = load_queries()
+    OUT_DIR.mkdir(exist_ok=True)
 
-    print("=== Year-over-year growth (last 8 years) ===")
-    print(run(conn, queries["yoy_growth"]).tail(8).to_string(index=False), "\n")
+    # Run every query, print a preview, and save the full result as a CSV so the
+    # output is viewable directly in the repo (GitHub renders CSVs as tables).
+    for name, sql in queries.items():
+        result = run(conn, sql)
+        result.to_csv(OUT_DIR / f"{name}.csv", index=False)
+        print(f"=== {name} ({len(result)} rows) ===")
+        print(result.head(12).to_string(index=False), "\n")
 
-    print("=== Seasonal index (100 = average month) ===")
-    print(run(conn, queries["seasonal_index"]).to_string(index=False), "\n")
-
-    print("=== Five highest-sales months on record ===")
-    print(run(conn, queries["top_months"]).to_string(index=False), "\n")
-
-    yearly = run(conn, queries["yearly_totals"])
-    print(f"Years covered: {len(yearly)}  "
-          f"({yearly['year'].iloc[0]}–{yearly['year'].iloc[-1]})")
     conn.close()
+    print(f"Saved {len(queries)} query results to {OUT_DIR.name}/")
 
 
 if __name__ == "__main__":
