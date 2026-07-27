@@ -5,8 +5,9 @@ so a business could plan inventory, staffing, and cash flow *ahead* of demand.
 
 > ⏳ **Work in progress** — being built out over several days. Done so far: the
 > forecasting engine (three models compared), a year-over-year growth analysis,
-> and an **interactive Streamlit dashboard**. Coming next: unit tests, a
-> notebook, and a written write-up.
+> an **interactive Streamlit dashboard**, a **SQL analysis layer**, **unit
+> tests**, and a **Jupyter notebook** walkthrough. Coming next: a written
+> business write-up.
 
 ## Problem
 
@@ -73,6 +74,31 @@ streamlit run app.py
 It can also be deployed free at [share.streamlit.io](https://share.streamlit.io)
 by connecting this GitHub repo.
 
+## SQL analysis
+
+The same series is also analysed with **SQL** (SQLite) — see
+[`sql/queries.sql`](sql/queries.sql) for yearly totals, the seasonal index,
+record months, and year-over-year growth (using a `LAG` window function, and
+excluding partial years). Run it with:
+
+```bash
+python sql_analysis.py
+```
+
+## Notebook
+
+[`forecasting_walkthrough.ipynb`](forecasting_walkthrough.ipynb) is a
+step-by-step walkthrough with the reasoning, tables, and charts rendered inline —
+including a pandas-vs-SQL consistency check.
+
+## Tests
+
+The forecasting helpers and SQL layer are covered by unit tests:
+
+```bash
+pytest
+```
+
 ## Run it
 
 ```bash
@@ -85,7 +111,7 @@ written to `forecast.csv`.
 
 ## Tech
 
-Python · pandas · statsmodels · scikit-learn · Streamlit · Plotly · matplotlib
+Python · pandas · statsmodels · scikit-learn · SQL (SQLite) · Streamlit · Plotly · pytest
 
 ---
 
