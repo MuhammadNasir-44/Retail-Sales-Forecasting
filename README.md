@@ -1,7 +1,13 @@
 # US Retail Sales Forecasting
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
+
 Forecasting monthly US retail & food-services sales with time-series methods,
 so a business could plan inventory, staffing, and cash flow *ahead* of demand.
+
+🧭 **New here? Start with [`OVERVIEW.md`](OVERVIEW.md)** — a one-page tour of the
+whole project (what, how, results, and file map).
 
 📄 **For the full business write-up, see [`REPORT.md`](REPORT.md)** — an
 executive-style analysis with the forecast, model validation, and
