@@ -3,11 +3,13 @@
 Forecasting monthly US retail & food-services sales with time-series methods,
 so a business could plan inventory, staffing, and cash flow *ahead* of demand.
 
-> ⏳ **Work in progress** — being built out over several days. Done so far: the
-> forecasting engine (three models compared), a year-over-year growth analysis,
-> an **interactive Streamlit dashboard**, a **SQL analysis layer**, **unit
-> tests**, and a **Jupyter notebook** walkthrough. Coming next: a written
-> business write-up.
+📄 **For the full business write-up, see [`REPORT.md`](REPORT.md)** — an
+executive-style analysis with the forecast, model validation, and
+recommendations.
+
+**What's inside:** a three-model comparison, a year-over-year growth analysis, an
+interactive Streamlit dashboard, a SQL analysis layer, unit tests, and a Jupyter
+notebook walkthrough.
 
 ## Problem
 
