@@ -1,0 +1,4 @@
+# Jupyter notebooks embed executed chart images, which inflates their byte
+# count and skews GitHub's language stats. Count them as documentation so the
+# language bar reflects the project's real language (Python).
+*.ipynb linguist-documentation
